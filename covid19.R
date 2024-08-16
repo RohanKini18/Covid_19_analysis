@@ -1,0 +1,224 @@
+# R PROGRAMMING DATA ANALYSIS ON COVID-19 IN COUNTRY-REGIONS 
+#  1) US
+#  2) Germany
+#  3) Italy
+#  4) South Korea
+
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(cowplot)
+library(scales)
+library(glue)
+library(ggcorrplot)
+
+
+confirmed_file = "../R Project/time_series_covid19_confirmed_global.csv"
+deaths_file = "../R Project/time_series_covid19_deaths_global.csv"
+recovered_file = "../R Project/time_series_covid19_recovered_global.csv"
+owid_file = "../R Project/owid-covid-data.csv"
+
+confirmed_df = read.csv(confirmed_file, header = TRUE, na.strings = c("", " "))
+deaths_df = read.csv(deaths_file, header = TRUE, na.strings = c("", " "))
+recovered_df = read.csv(recovered_file, header = TRUE, na.strings = c("", " "))
+owid_df = read.csv(owid_file, header = TRUE, na.strings = c("", " "), stringsAsFactors = F)
+
+head(confirmed_df)
+head(deaths_df)
+head(recovered_df)
+head(owid_df)
+#.............................................................................................
+confirmed_df[confirmed_df$Country.Region == "Canada", ]
+
+#here w want to know specific countries in confirmed cases in csv 
+unique(confirmed_df[!is.na(confirmed_df$Province.State), "Country.Region"])
+#similarly here but in recovered cases in .csv file
+unique(recovered_df[!is.na(recovered_df$Province.State), "Country.Region"])
+#similaryy  deaths cases in .csv file
+unique(deaths_df[!is.na(deaths_df$Province.State), "Country.Region"])
+
+#Data Transformation
+
+us_confirmed = confirmed_df[confirmed_df$Country.Region == "US", ]
+us_deaths = deaths_df[deaths_df$Country.Region == "US", ]
+us_recovered = recovered_df[recovered_df$Country.Region == "US", ]
+
+germany_confirmed = confirmed_df[confirmed_df$Country.Region == "Germany", ]
+germany_deaths = deaths_df[deaths_df$Country.Region == "Germany", ]
+germany_recovered = recovered_df[recovered_df$Country.Region == "Germany", ]
+
+italy_confirmed = confirmed_df[confirmed_df$Country.Region == "Italy", ]
+italy_deaths = deaths_df[deaths_df$Country.Region == "Italy", ]
+italy_recovered = recovered_df[recovered_df$Country.Region == "Italy", ]
+
+sk_confirmed = confirmed_df[confirmed_df$Country.Region == "Korea, South", ]
+sk_deaths = deaths_df[deaths_df$Country.Region == "Korea, South", ]
+sk_recovered = recovered_df[recovered_df$Country.Region == "Korea, South", ]
+
+us_confirmed #u can c confirmed cases belonged to US  
+
+
+# convert the data to a more usable format
+clean_frame <- function(df){
+  
+  # transpose the dataframe and gather dates and number of cases
+suppressWarnings(df <- df %>% rownames_to_column() %>% gather(Date, Cases, -c()))
+  
+  # remove extra column
+df$rowname <- NULL
+  
+  # convert column to correct date type
+suppressWarnings(df$Cases <- as.numeric(df$Cases))
+  
+  # remove extra rows
+  df <- df[-c(1, 2, 3, 4, 5), ]
+  
+  # remove the X infront of date
+  df$Date <- sapply(df$Date,function(x) {x <- gsub("X","",x)})
+  
+  # convert date to actual date datatype
+  df$Date <- as.Date(df$Date, "%m.%d.%y")
+  
+  return (df)
+}
+
+# combine confirmed, deaths and recoveries
+
+#Here we r analyzing confirmed, deaths and recovery cases beginning of Covid arrival of top 5 days from month January.
+combine_frames = function(conf, death, rec) {
+  combined_df = data.frame(matrix(ncol = 0, nrow = nrow(conf)))
+  combined_df$Date = conf$Date
+  combined_df$Confirmed = conf$Cases
+  combined_df$Deaths = death$Cases
+  combined_df$Recovered = rec$Cases
+  
+  return (combined_df)
+  
+}
+
+
+us_df = combine_frames(clean_frame(us_confirmed), clean_frame(us_deaths), clean_frame(us_recovered))
+
+germany_df = combine_frames(clean_frame(germany_confirmed), clean_frame(germany_deaths), clean_frame(germany_recovered))
+
+italy_df = combine_frames(clean_frame(italy_confirmed), clean_frame(italy_deaths), clean_frame(italy_recovered))
+
+sk_df = combine_frames(clean_frame(sk_confirmed), clean_frame(sk_deaths), clean_frame(sk_recovered))
+
+
+
+head(us_df)
+head(germany_df)
+head(italy_df)
+head(sk_df)
+
+
+#Visual and Descriptive Analysis
+
+# graph size on canvas
+fig <- function(width, heigth){
+     options(repr.plot.width = width, repr.plot.height = heigth)
+}
+
+
+theme_set(theme_cowplot()) # the plot theme
+fig(14, 13)
+plot_grid(ggplot(data = us_df , aes(x = Date , y = Confirmed)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "yellow", size = 2) + scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)),
+          ggplot(data = us_df , aes(x = Date , y = Deaths)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "red", size = 2) +   scale_y_continuous(labels = unit_format(unit = "K", scale = 1)), 
+          ggplot(data = us_df , aes(x = Date , y = Recovered)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "green", size = 2) + scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)),
+          labels = "", align = "v", ncol = 1)
+
+
+
+us_cases_outcome = tail(us_df, 1)[3] + tail(us_df, 1)[4] # cases that had an outcome
+us_cases_outcome = as.numeric(us_cases_outcome$Deaths)
+us_outcome_percent = round((us_cases_outcome / tail(us_df, 1)[2]) * 100, 2)$Confirmed
+us_deaths_percent = round((tail(us_df, 1)[3] / us_cases_outcome)$Deaths * 100, 2)
+us_rec_percent = round((tail(us_df, 1)[4] / us_cases_outcome)$Recovered * 100, 2)
+us_active = round(tail(us_df, 1)[2] - us_cases_outcome, 2)
+
+glue("Number of cases which had an outcome: {us_cases_outcome}")
+glue("percentage of cases that had an outcome: {us_outcome_percent}%")
+glue("Deaths rate: {us_deaths_percent}%")
+glue("Recovery rate: {us_rec_percent}%")
+glue("Currently Active cases: {us_active}")
+
+#German 
+
+fig(14, 13)
+plot_grid(ggplot(data = germany_df , aes(x = Date , y = Confirmed)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "yellow", size = 2) + scale_y_continuous(labels = unit_format(unit = "K", scale = 1)),
+          ggplot(data = germany_df , aes(x = Date , y = Deaths)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "red", size = 2) +   scale_y_continuous(labels = unit_format(unit = "K", scale = 1)), 
+          ggplot(data = germany_df , aes(x = Date , y = Recovered)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "green", size = 2) + scale_y_continuous(labels = unit_format(unit = "K", scale = 1)),
+          labels = "", align = "v", ncol = 1)
+
+
+germany_cases_outcome = tail(germany_df, 1)[3] + tail(germany_df, 1)[4] # cases that had an outcome
+germany_cases_outcome = as.numeric(germany_cases_outcome$Deaths)
+germany_outcome_percent = round((germany_cases_outcome / tail(germany_df, 1)[2]) * 100, 2)$Confirmed
+germany_deaths_percent = round((tail(germany_df, 1)[3] / germany_cases_outcome)$Deaths * 100, 2)
+germany_rec_percent = round((tail(germany_df, 1)[4] / germany_cases_outcome)$Recovered * 100, 2)
+germany_active = round(tail(germany_df, 1)[2] - germany_cases_outcome, 2)
+
+glue("Number of cases which had an outcome: {germany_cases_outcome}")
+glue("percentage of cases that had an outcome: {germany_outcome_percent}%")
+glue("Death rate: {germany_deaths_percent}%")
+glue("Recovery rate: {germany_rec_percent}%")
+glue("Currently Active cases: {germany_active}")
+
+#Italy
+
+fig(14, 13)
+plot_grid(ggplot(data = italy_df , aes(x = Date , y = Confirmed)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "yellow", size = 2) + scale_y_continuous(labels = unit_format(unit = "K", scale = 1)),
+          ggplot(data = italy_df , aes(x = Date , y = Deaths)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "red", size = 2) + scale_y_continuous(labels = unit_format(unit = "K", scale = 1)), 
+          ggplot(data = italy_df , aes(x = Date , y = Recovered)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "green", size = 2) + scale_y_continuous(labels = unit_format(unit = "K", scale = 1)), 
+          labels = "", align = "v", ncol = 1)
+
+italy_cases_outcome = tail(italy_df, 1)[3] + tail(italy_df, 1)[4] # cases that had an outcome
+italy_cases_outcome = as.numeric(italy_cases_outcome$Deaths)
+italy_outcome_percent = round((italy_cases_outcome / tail(italy_df, 1)[2]) * 100, 2)$Confirmed
+italy_deaths_percent = round((tail(italy_df, 1)[3] / italy_cases_outcome)$Deaths * 100, 2)
+italy_rec_percent = round((tail(italy_df, 1)[4] / italy_cases_outcome)$Recovered * 100, 2)
+italy_active = round(tail(italy_df, 1)[2] - italy_cases_outcome, 2)
+
+glue("Number of cases which had an outcome: {italy_cases_outcome}")
+glue("percentage of cases that had an outcome: {italy_outcome_percent}%")
+glue("Death rate: {italy_deaths_percent}%")
+glue("Recovery rate: {italy_rec_percent}%")
+glue("Currently Active cases: {italy_active}")
+
+#South Korea
+
+fig(14, 13)
+plot_grid(ggplot(data = sk_df , aes(x = Date , y = Confirmed)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "yellow", size = 2),
+          ggplot(data = sk_df , aes(x = Date , y = Deaths)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "red", size = 2), 
+          ggplot(data = sk_df , aes(x = Date , y = Recovered)) + scale_x_date(date_breaks = "1 month", labels = date_format("%b %Y")) +
+            geom_line(colour = "green", size = 2),
+          labels = "", align = "v", ncol = 1)
+
+sk_cases_outcome = tail(sk_df, 1)[3] + tail(sk_df, 1)[4] # cases that had an outcome
+sk_cases_outcome = as.numeric(sk_cases_outcome$Deaths)
+sk_outcome_percent = round((sk_cases_outcome / tail(sk_df, 1)[2]) * 100, 2)$Confirmed
+sk_deaths_percent = round((tail(sk_df, 1)[3] / sk_cases_outcome)$Deaths * 100, 2)
+sk_rec_percent = round((tail(sk_df, 1)[4] / sk_cases_outcome)$Recovered * 100, 2)
+sk_active = round(tail(sk_df, 1)[2] - sk_cases_outcome, 2)
+
+glue("Number of cases which had an outcome: {sk_cases_outcome}")
+glue("percentage of cases that had an outcome: {sk_outcome_percent}%")
+glue("Death rate: {sk_deaths_percent}%")
+glue("Recovery rate: {sk_rec_percent}%")
+glue("Currently Active cases: {sk_active}")
+
+
+
+
